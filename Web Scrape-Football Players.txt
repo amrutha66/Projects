@@ -1,0 +1,30 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import numpy as np
+url = 'https://en.wikipedia.org/wiki/Player_efficiency_rating'
+response = requests.get(url)
+
+#Scraping table for analysis
+soup = BeautifulSoup(response.text,"html.parser")
+table = soup.find("table",{"class": "wikitable sortable"})
+rows=[]
+for row in table.find_all("tr"):
+    rows.append(row.text)
+    
+#print(rows)
+new = []
+for x in rows:
+    sample = x.split('\n')
+    del sample[0]
+    del sample[3]
+    new.append(sample)
+df = pd.DataFrame(new, columns=["Rank","Player","PER"])
+df.drop(0, inplace=True)
+print("\tTop 10 efficient players")
+print(df.sort_values('PER', ascending=False).head(10))
+
+#printing efficiency of a team of top players indicated by *
+star_players = (df[df['Player'].str.contains("\*")])
+df['PER'] = pd.to_numeric(df['PER'])
+print("\nTotal efficiency of a team of Star Players =",df['PER'].sum())
