@@ -1,0 +1,234 @@
+############################################## Data Loading ###########################################
+```{r}
+#Loading libraries
+library(ggplot2)
+library(kernlab)
+library(caret)
+library(caTools)
+library(gridExtra)
+
+#Reading MNIST data file
+mnist_data <- read.csv("train_digit.csv", stringsAsFactors = F, header = T)
+
+names(mnist_data)[1] <- "label"
+```
+
+```{r}
+#Reading MNIST data file
+mnist_data <- read.csv("train_digit.csv", stringsAsFactors = F, header = T)
+
+names(mnist_data)[1] <- "label"
+```
+
+
+################################## Data cleaning, preparation & understanding ##############################
+```{r}
+#Data cleaning
+#-------------
+
+# Checking for duplicate rows
+sum(duplicated(mnist_data)) # no duplicate rows
+
+# Checking for NAs
+sum(sapply(mnist_data, function(x) sum(is.na(x)))) # There are no missing values
+```
+
+```{r}
+# Checking for NAs
+
+sum(sapply(mnist_data, function(x) sum(is.na(x)))) # There are no missing values
+```
+
+```{r}
+#Data understanding
+#------------------
+
+# The MNIST database has 784 columns apart from the label that consist of  28*28 matrix describing the scanned image of the digits
+dim(mnist_data)
+```
+
+```{r}
+#Label column contains one of the digits to recognize(0-9)
+summary(mnist_data[1])
+```
+
+
+```{r}
+#Data preparation
+#-----------------
+
+# The dataset is split into 25% test data and 75% training data
+set.seed(100)
+training <- createDataPartition(mnist_data$label, p = .75, list = FALSE, times = 1)
+
+train <- mnist_data[training,]
+train <- train[1:5000,]
+test <- mnist_data[-training,]
+test <- test[1:2000,]
+
+train$X <- train[, -1]
+test$X <- test[ , -1]
+```
+
+```{r}
+# Convert label variable into factor
+train$label <- factor(train$label)
+summary(train$label)
+```
+```{r}
+test$label <- factor(test$label)
+summary(test$label)
+```
+
+
+################################## Exploratory Data Analysis ##############################
+```{r}
+## Distribution of digits across all data sets
+
+#MNIST data set
+plot1 <- ggplot(mnist_data, aes(x = label, y = (..count..)/sum(..count..))) + geom_bar() + theme_light() +
+  labs(y = "Relative frequency", title = "mnist dataset") + 
+  scale_y_continuous(labels=scales::percent, limits = c(0 , 0.15)) +
+  geom_text(stat = "count", 
+            aes(label = scales:: percent((..count..)/sum(..count..)), vjust = -1))
+
+#Train dataset
+plot2 <- ggplot(train, aes(x = label, y = (..count..)/sum(..count..))) + geom_bar() + theme_light() +
+  labs(y = "Relative frequency", title = "train dataset") + 
+  scale_y_continuous(labels=scales::percent, limits = c(0 , 0.15)) +
+  geom_text(stat = "count", 
+            aes(label = scales:: percent((..count..)/sum(..count..)), vjust = -1))
+
+#Test dataset
+plot3 <- ggplot(test, aes(x = label, y = (..count..)/sum(..count..))) + geom_bar() + theme_light() +
+  labs(y = "Relative frequency", title = "test dataset") + 
+  scale_y_continuous(labels=scales::percent, limits = c(0 , 0.15)) +
+  geom_text(stat = "count", 
+            aes(label = scales:: percent((..count..)/sum(..count..)), vjust = -1))
+
+grid.arrange(plot1, plot2, plot3, nrow = 3)
+```
+
+
+######################################### Model Building & Evaluation ######################################
+
+Linear Kernel
+-------------
+
+```{r}
+## 1.A. Linear kernel using default parameters
+
+model1_linear <- ksvm(as.matrix(train$X), train$label, kernel="vanilladot", C=1, scaled = FALSE)
+print(model1_linear) 
+```
+```{r}
+eval1_linear <- predict(model1_linear, test$X)
+```
+```{r}
+test$label <- as.factor(test$label)
+result1a <- confusionMatrix(eval1_linear, test$label) 
+result1a
+```
+
+
+```{r}
+## 1.B. Linear kernel using stricter C
+
+model2_linear <- ksvm(as.matrix(train$X), train$label, scaled = FALSE, kernel = "vanilladot", C = 10)
+print(model2_linear) 
+```
+```{r}
+eval2_linear <- predict(model2_linear, newdata = test$X, type = "response")
+result1b = confusionMatrix(eval2_linear, test$label) 
+result1b
+```
+
+
+Radial Kernel
+-------------
+```{r}
+## 2.A. Radial kernel using default parameters
+
+model1_rbf <- ksvm(as.matrix(train$X), train$label, scaled = FALSE, kernel = "rbfdot", C = 1, kpar = "automatic")
+print(model1_rbf) 
+```
+```{r}
+eval1_rbf <- predict(model1_rbf, newdata = test$X, type = "response")
+result2a = confusionMatrix(eval1_rbf, test$label) 
+result2a
+```
+
+```{r}
+## 2.B. Radial kernel with higher sigma
+
+model2_rbf <- ksvm(as.matrix(train$X), train$label, scaled = FALSE, kernel = "rbfdot",
+                   C = 1, kpar = list(sigma = 1))
+print(model2_rbf) 
+```
+```{r}
+eval2_rbf <- predict(model2_rbf, newdata = test$X, type = "response")
+result2b = confusionMatrix(eval2_rbf, test$label)
+result2b
+```
+
+Polynomial Kernel 
+------------------
+```{r}
+## 3.A. Polynomial kernel with degree 2 and default scale
+model1_poly <- ksvm(as.matrix(train$X), train$label, kernel = "polydot", scaled = FALSE, C = 1, 
+                    kpar = list(degree = 2, scale = 1, offset = 1))
+print(model1_poly)
+```
+```{r}
+eval1_poly <- predict(model1_poly, newdata = test$X)
+result3a = confusionMatrix(eval1_poly, test$label)
+result3a
+```
+
+```{r}
+## 3.B. Polynomial kernel with varied scale
+model2_poly <- ksvm(as.matrix(train$X), train$label, kernel = "polydot", scaled = FALSE, C = 1, 
+                    kpar = list(degree = 2, scale = -2, offset = 1))
+print(model2_poly)
+```
+```{r}
+eval2_poly <- predict(model2_poly, newdata = test$X)
+result3b = confusionMatrix(eval2_poly, test$label)
+result3b
+```
+
+```{r}
+## 3.C. Grid search to optimise hyperparameters
+
+grid_poly = expand.grid(C= c(0.001,0.01), degree = c(2), scale = c(-2))
+
+fit.poly <- train(as.matrix(train$X), train$label, scale = "FALSE", metric = "Accuracy", method = "svmPoly",tuneGrid = grid_poly, trControl = trainControl(method = "cv", number=2), preProcess = NULL)
+
+# printing results of cross validation
+print(fit.poly) 
+plot(fit.poly)
+```
+```{r}
+eval_cv_poly <- predict(fit.poly, newdata = test$X)
+result3c = confusionMatrix(eval_cv_poly, test$label)
+result3c
+```
+
+```{r}
+## 3.D. Implementing optmised polynomial model 
+model5_poly <- ksvm(as.matrix(train$X), train$label, kernel = "polydot", scaled = FALSE, C = 0.01, 
+                    kpar = list(degree = 2, scale = 1, offset = 0.5))
+print(model5_poly)
+```
+```{r}
+eval5_poly <- predict(model5_poly, newdata = test$X)
+result3d = confusionMatrix(eval5_poly, test$label)
+result3d
+```
+
+
+################################################ Conclusion ################################################
+```{r}
+# Final model
+final_model = fit.poly
+```
